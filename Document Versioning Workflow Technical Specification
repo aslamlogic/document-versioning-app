@@ -1,0 +1,187 @@
+{
+  "name": "Document Versioning Workflow",
+  "nodes": [
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "document-upload",
+        "responseMode": "responseNode"
+      },
+      "id": "webhook-upload",
+      "name": "Webhook - Upload Document",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 1.1,
+      "position": [240, 300]
+    },
+    {
+      "parameters": {
+        "values": {
+          "string": [
+            { "name": "documentId", "value": "={{ $json.documentId || $json.body.documentId }}" },
+            { "name": "versionNumber", "value": "={{ $json.versionNumber || 'V1' }}" },
+            { "name": "status", "value": "DRAFT_IN_PROGRESS" },
+            { "name": "authorId", "value": "={{ $json.authorId || 'current-user' }}" },
+            { "name": "notes", "value": "" }
+          ]
+        }
+      },
+      "id": "set-metadata",
+      "name": "Set Metadata & Status",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [460, 300]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "string": [
+            { "value1": "={{ $json.status }}", "operation": "equals", "value2": "DRAFT_IN_PROGRESS" }
+          ]
+        }
+      },
+      "id": "switch-status",
+      "name": "Check Status",
+      "type": "n8n-nodes-base.switch",
+      "typeVersion": 3.2,
+      "position": [680, 300]
+    },
+    {
+      "parameters": {
+        "operation": "wait",
+        "resume": "form",
+        "formTitle": "Review Changes & Add Notes",
+        "formFields": {
+          "values": [
+            { "fieldLabel": "Version Notes", "fieldType": "textarea", "required": true, "fieldName": "notes" },
+            { "fieldLabel": "Reviewed & Approved?", "fieldType": "select", "options": "Yes\nNo", "required": true, "fieldName": "approved" }
+          ]
+        }
+      },
+      "id": "wait-review-notes",
+      "name": "Review Changes + Add Notes",
+      "type": "n8n-nodes-base.wait",
+      "typeVersion": 1.1,
+      "position": [900, 300]
+    },
+    {
+      "parameters": {
+        "values": {
+          "string": [
+            { "name": "status", "value": "={{ $json.approved === 'Yes' ? 'DRAFT_UNDER_REVIEW' : 'DRAFT_IN_PROGRESS' }}" }
+          ]
+        }
+      },
+      "id": "update-status-review",
+      "name": "Update Status After Review",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [1120, 300]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "string": [
+            { "value1": "={{ $json.status }}", "operation": "equals", "value2": "DRAFT_UNDER_REVIEW" }
+          ]
+        }
+      },
+      "id": "switch-under-review",
+      "name": "Check Under Review",
+      "type": "n8n-nodes-base.switch",
+      "typeVersion": 3.2,
+      "position": [1340, 300]
+    },
+    {
+      "parameters": {
+        "operation": "wait",
+        "resume": "form",
+        "formTitle": "Sign-off / Publish",
+        "formFields": {
+          "values": [
+            { "fieldLabel": "Sign-off Decision", "fieldType": "select", "options": "Approve & Publish\nReject", "required": true, "fieldName": "decision" }
+          ]
+        }
+      },
+      "id": "wait-signoff",
+      "name": "Sign-off / Publish",
+      "type": "n8n-nodes-base.wait",
+      "typeVersion": 1.1,
+      "position": [1560, 300]
+    },
+    {
+      "parameters": {
+        "values": {
+          "string": [
+            { "name": "status", "value": "={{ $json.decision === 'Approve & Publish' ? 'APPROVED_PUBLISHED' : 'DRAFT_UNDER_REVIEW' }}" }
+          ]
+        }
+      },
+      "id": "set-final-status",
+      "name": "Set Final Status",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [1780, 300]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "string": [
+            { "value1": "={{ $json.status }}", "operation": "equals", "value2": "APPROVED_PUBLISHED" }
+          ]
+        }
+      },
+      "id": "switch-published",
+      "name": "Check Published",
+      "type": "n8n-nodes-base.switch",
+      "typeVersion": 3.2,
+      "position": [2000, 300]
+    },
+    {
+      "parameters": {
+        "values": {
+          "string": [
+            { "name": "versionNumber", "value": "={{ 'V' + (parseInt($json.versionNumber.replace('V','')) + 1) }}" },
+            { "name": "status", "value": "DRAFT_IN_PROGRESS" },
+            { "name": "notes", "value": "" }
+          ]
+        }
+      },
+      "id": "create-new-version",
+      "name": "Create New Version",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [2220, 300]
+    }
+  ],
+  "connections": {
+    "Webhook - Upload Document": { "main": [[{ "node": "Set Metadata & Status", "type": "main", "index": 0 }]] },
+    "Set Metadata & Status": { "main": [[{ "node": "Check Status", "type": "main", "index": 0 }]] },
+    "Check Status": {
+      "main": [
+        [{ "node": "Review Changes + Add Notes", "type": "main", "index": 0 }],
+        []
+      ]
+    },
+    "Review Changes + Add Notes": { "main": [[{ "node": "Update Status After Review", "type": "main", "index": 0 }]] },
+    "Update Status After Review": { "main": [[{ "node": "Check Under Review", "type": "main", "index": 0 }]] },
+    "Check Under Review": {
+      "main": [
+        [{ "node": "Sign-off / Publish", "type": "main", "index": 0 }],
+        []
+      ]
+    },
+    "Sign-off / Publish": { "main": [[{ "node": "Set Final Status", "type": "main", "index": 0 }]] },
+    "Set Final Status": { "main": [[{ "node": "Check Published", "type": "main", "index": 0 }]] },
+    "Check Published": {
+      "main": [
+        [{ "node": "Create New Version", "type": "main", "index": 0 }],
+        []
+      ]
+    }
+  },
+  "active": false,
+  "settings": {},
+  "meta": {
+    "templateCredsSetupCompleted": true
+  }
+}
