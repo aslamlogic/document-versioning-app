@@ -1,5 +1,5 @@
 {
-  "name": "Pareto LLM Routing – Versioning App",
+  "name": "Pareto LLM Routing - Versioning App",
   "nodes": [
     {
       "parameters": {},
@@ -193,7 +193,7 @@
     },
     {
       "parameters": {
-        "jsCode": "// Spec review needed – send notification or log\nconst msg = `Premium model failed after ${$json.cheap_attempt} cheap attempts. Errors: ${$json.errors.join(', ')}. Please review the specification.`;\nconsole.error(msg);\n// Optionally call a webhook or send email\nreturn { status: 'spec_review_needed', message: msg };"
+        "jsCode": "// Spec review needed – send notification or log\nconst msg = `Premium model failed after ${$json.cheap_attempt} cheap attempts. Errors: ${$json.errors.join(', ')}. Please review the specification.`;\nconsole.error(msg);\nreturn { status: 'spec_review_needed', message: msg };"
       },
       "id": "spec-review",
       "name": "Spec Review",
@@ -298,5 +298,8 @@
     "Commit to GitHub": { "main": [[{ "node": "Trigger Coolify Deploy", "type": "main", "index": 0 }]] },
     "Trigger Coolify Deploy": { "main": [[{ "node": "Log Success", "type": "main", "index": 0 }]] }
   },
-  "settings": { "executionOrder": "v1" }
+  "settings": { "executionOrder": "v1" },
+  "staticData": null,
+  "tags": [],
+  "triggerCount": 0
 }
