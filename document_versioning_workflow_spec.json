@@ -1,168 +1,187 @@
 {
-  "metadata": {
-    "title": "Document Versioning Workflow Solution - Technical Specification",
-    "version": "1.0",
-    "date": "May 23, 2026",
-    "author": "Technical Architecture Team",
-    "status": "Draft for Review",
-    "documentType": "Technical Specification"
-  },
-
-  "executiveSummary": {
-    "description": "This technical specification defines the requirements, architecture, and implementation plan for the Document Versioning Workflow Solution. It provides a structured, auditable process for uploading document updates, performing side-by-side change reviews, adding version notes, managing publication states, and creating successive document versions.",
-    "keyBenefits": [
-      "Reduced errors through mandatory diff review and note-taking",
-      "Full audit trail via author, date, and notes metadata",
-      "Clear status management (Draft/In Progress → Under Review → Approved/Published)",
-      "One-click creation of new versions post-publication"
-    ]
-  },
-
-  "introduction": {
-    "purpose": "Deliver a user-centric workflow interface that replaces ad-hoc document update practices with a controlled, versioned process.",
-    "scope": {
-      "inScope": [
-        "Web-based single-page application (SPA) workflow UI",
-        "Support for .DOCX and .PDF formats (initially)",
-        "Real-time upload progress, visual diff rendering, and state machine",
-        "Basic role-based actions (e.g., sign-off privileges)"
-      ],
-      "outOfScope": [
-        "Backend document storage, OCR, or full-text search",
-        "Mobile responsive design (desktop-first)",
-        "Advanced branching/merging of versions",
-        "Integration with external identity providers",
-        "Reporting/analytics dashboards"
-      ]
-    },
-    "assumptionsAndConstraints": [
-      "Users authenticate via existing corporate SSO",
-      "Documents are stored in a central repository with API access",
-      "Operates as a frontend module within a larger DMS"
-    ]
-  },
-
-  "functionalRequirements": {
-    "uploadUpdate": {
-      "fr_1_1": "Support drag-and-drop and file browser selection for supported formats",
-      "fr_1_2": "Display real-time upload progress bar (0–100%) with status text",
-      "fr_1_3": "Show green checkmark and confirmation message on successful upload",
-      "fr_1_4": "Validate file type and size (max 50 MB)"
-    },
-    "reviewChanges": {
-      "fr_2_1": "Render side-by-side diff view: Previous Version vs New Version",
-      "fr_2_2": "Apply visual highlighting (green = insertions, red = deletions)",
-      "fr_2_3": "Indicate completion status and provide zoom/pan controls",
-      "fr_2_4": "Support navigation between pages/sections"
-    },
-    "addNotes": {
-      "fr_3_1": "Present structured form with Version Notes (required), Author, and Date",
-      "fr_3_2": "Save Draft button persists notes and transitions status",
-      "fr_3_3": "Display historical version timeline sidebar",
-      "fr_3_4": "Support rich text/markdown in notes (future)"
-    },
-    "publish": {
-      "fr_4_1": "Display version status pills with color coding",
-      "fr_4_2": "Enable Sign-off action for authorized roles",
-      "fr_4_3": "Automatically update status to Approved/Published upon approval",
-      "fr_4_4": "Provide Publish confirmation modal"
-    },
-    "createNewVersion": {
-      "fr_5_1": "Prominent 'Create New Version' button",
-      "fr_5_2": "Confirmation dialog before finalizing",
-      "fr_5_3": "Archive current version, increment version number, reset workflow",
-      "fr_5_4": "Maintain immutable history of all prior versions"
-    }
-  },
-
-  "systemDesign": {
-    "uiLayout": {
-      "description": "Horizontal five-panel workflow with central content area and right-hand version history sidebar",
-      "colorPalette": {
-        "primary": "#1E40AF",
-        "success": "#10B981",
-        "danger": "#EF4444",
-        "warning": "#F59E0B"
-      }
-    },
-    "dataModel": {
-      "versionEntity": {
-        "id": "uuid",
-        "documentId": "uuid",
-        "versionNumber": "string (e.g. V3)",
-        "status": "DRAFT_IN_PROGRESS | DRAFT_UNDER_REVIEW | APPROVED_PUBLISHED",
-        "authorId": "user-uuid",
-        "createdAt": "ISO timestamp",
-        "notes": "string (min 20 chars)",
-        "fileUrl": "string",
-        "diffHighlights": "object"
-      }
-    },
-    "stateMachine": [
-      "DRAFT_IN_PROGRESS → DRAFT_UNDER_REVIEW (Save Notes + Submit)",
-      "DRAFT_UNDER_REVIEW → APPROVED_PUBLISHED (Sign-off)",
-      "APPROVED_PUBLISHED → DRAFT_IN_PROGRESS (Create New Version)"
-    ]
-  },
-
-  "nonFunctionalRequirements": [
+  "name": "Document Versioning Workflow",
+  "nodes": [
     {
-      "category": "Performance",
-      "requirement": "Upload of 50 MB file completes with progress feedback",
-      "target": "< 30 seconds end-to-end"
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "document-upload",
+        "responseMode": "responseNode"
+      },
+      "id": "webhook-upload",
+      "name": "Webhook - Upload Document",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 1.1,
+      "position": [240, 300]
     },
     {
-      "category": "Usability",
-      "requirement": "New user completes full workflow without training",
-      "target": "< 5 minutes"
+      "parameters": {
+        "values": {
+          "string": [
+            { "name": "documentId", "value": "={{ $json.documentId || $json.body.documentId }}" },
+            { "name": "versionNumber", "value": "={{ $json.versionNumber || 'V1' }}" },
+            { "name": "status", "value": "DRAFT_IN_PROGRESS" },
+            { "name": "authorId", "value": "={{ $json.authorId || 'current-user' }}" },
+            { "name": "notes", "value": "" }
+          ]
+        }
+      },
+      "id": "set-metadata",
+      "name": "Set Metadata & Status",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [460, 300]
     },
     {
-      "category": "Reliability",
-      "requirement": "Zero data loss on version finalization",
-      "target": "99.9% uptime"
+      "parameters": {
+        "conditions": {
+          "string": [
+            { "value1": "={{ $json.status }}", "operation": "equals", "value2": "DRAFT_IN_PROGRESS" }
+          ]
+        }
+      },
+      "id": "switch-status",
+      "name": "Check Status",
+      "type": "n8n-nodes-base.switch",
+      "typeVersion": 3.2,
+      "position": [680, 300]
     },
     {
-      "category": "Security",
-      "requirement": "Role-based access control + encryption at rest",
-      "target": "SOC 2 / ISO 27001 alignment"
+      "parameters": {
+        "operation": "wait",
+        "resume": "form",
+        "formTitle": "Review Changes & Add Notes",
+        "formFields": {
+          "values": [
+            { "fieldLabel": "Version Notes", "fieldType": "textarea", "required": true, "fieldName": "notes" },
+            { "fieldLabel": "Reviewed & Approved?", "fieldType": "select", "options": "Yes\nNo", "required": true, "fieldName": "approved" }
+          ]
+        }
+      },
+      "id": "wait-review-notes",
+      "name": "Review Changes + Add Notes",
+      "type": "n8n-nodes-base.wait",
+      "typeVersion": 1.1,
+      "position": [900, 300]
     },
     {
-      "category": "Accessibility",
-      "requirement": "WCAG 2.1 AA compliance",
-      "target": "Automated + manual audit pass"
+      "parameters": {
+        "values": {
+          "string": [
+            { "name": "status", "value": "={{ $json.approved === 'Yes' ? 'DRAFT_UNDER_REVIEW' : 'DRAFT_IN_PROGRESS' }}" }
+          ]
+        }
+      },
+      "id": "update-status-review",
+      "name": "Update Status After Review",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [1120, 300]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "string": [
+            { "value1": "={{ $json.status }}", "operation": "equals", "value2": "DRAFT_UNDER_REVIEW" }
+          ]
+        }
+      },
+      "id": "switch-under-review",
+      "name": "Check Under Review",
+      "type": "n8n-nodes-base.switch",
+      "typeVersion": 3.2,
+      "position": [1340, 300]
+    },
+    {
+      "parameters": {
+        "operation": "wait",
+        "resume": "form",
+        "formTitle": "Sign-off / Publish",
+        "formFields": {
+          "values": [
+            { "fieldLabel": "Sign-off Decision", "fieldType": "select", "options": "Approve & Publish\nReject", "required": true, "fieldName": "decision" }
+          ]
+        }
+      },
+      "id": "wait-signoff",
+      "name": "Sign-off / Publish",
+      "type": "n8n-nodes-base.wait",
+      "typeVersion": 1.1,
+      "position": [1560, 300]
+    },
+    {
+      "parameters": {
+        "values": {
+          "string": [
+            { "name": "status", "value": "={{ $json.decision === 'Approve & Publish' ? 'APPROVED_PUBLISHED' : 'DRAFT_UNDER_REVIEW' }}" }
+          ]
+        }
+      },
+      "id": "set-final-status",
+      "name": "Set Final Status",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [1780, 300]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "string": [
+            { "value1": "={{ $json.status }}", "operation": "equals", "value2": "APPROVED_PUBLISHED" }
+          ]
+        }
+      },
+      "id": "switch-published",
+      "name": "Check Published",
+      "type": "n8n-nodes-base.switch",
+      "typeVersion": 3.2,
+      "position": [2000, 300]
+    },
+    {
+      "parameters": {
+        "values": {
+          "string": [
+            { "name": "versionNumber", "value": "={{ 'V' + (parseInt($json.versionNumber.replace('V','')) + 1) }}" },
+            { "name": "status", "value": "DRAFT_IN_PROGRESS" },
+            { "name": "notes", "value": "" }
+          ]
+        }
+      },
+      "id": "create-new-version",
+      "name": "Create New Version",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [2220, 300]
     }
   ],
-
-  "workBreakdownStructure": {
-    "totalEffort": "17 weeks (with 2-week buffer)",
-    "phases": {
-      "1.0": "Project Initiation & Governance (1 week)",
-      "1.1": "Analysis & Design (2 weeks)",
-      "1.2": "Frontend Development (5 weeks)",
-      "1.3": "Backend & Integration Development (4 weeks)",
-      "1.4": "Quality Assurance & Testing (3 weeks)",
-      "1.5": "Deployment, Training & Handover (2 weeks)"
+  "connections": {
+    "Webhook - Upload Document": { "main": [[{ "node": "Set Metadata & Status", "type": "main", "index": 0 }]] },
+    "Set Metadata & Status": { "main": [[{ "node": "Check Status", "type": "main", "index": 0 }]] },
+    "Check Status": {
+      "main": [
+        [{ "node": "Review Changes + Add Notes", "type": "main", "index": 0 }],
+        []
+      ]
+    },
+    "Review Changes + Add Notes": { "main": [[{ "node": "Update Status After Review", "type": "main", "index": 0 }]] },
+    "Update Status After Review": { "main": [[{ "node": "Check Under Review", "type": "main", "index": 0 }]] },
+    "Check Under Review": {
+      "main": [
+        [{ "node": "Sign-off / Publish", "type": "main", "index": 0 }],
+        []
+      ]
+    },
+    "Sign-off / Publish": { "main": [[{ "node": "Set Final Status", "type": "main", "index": 0 }]] },
+    "Set Final Status": { "main": [[{ "node": "Check Published", "type": "main", "index": 0 }]] },
+    "Check Published": {
+      "main": [
+        [{ "node": "Create New Version", "type": "main", "index": 0 }],
+        []
+      ]
     }
   },
-
-  "implementationRoadmap": {
-    "phase1": "Weeks 1–4: Core upload + diff review (Steps 1–2)",
-    "phase2": "Weeks 5–9: Notes, publish workflow, and version history (Steps 3–4)",
-    "phase3": "Weeks 10–14: New version creation, full integration, and hardening",
-    "phase4": "Weeks 15–17: UAT, deployment, and training"
-  },
-
-  "appendices": {
-    "glossary": {
-      "Diff": "Visual representation of changes between two document versions",
-      "Sign-off": "Formal approval action that transitions status to Published",
-      "Draft / In Progress": "Initial editable state after upload or new version creation"
-    },
-    "references": [
-      "Provided UI mockup diagram (image.png)",
-      "ISO 9001 (document control)",
-      "WCAG 2.1",
-      "OWASP Top 10"
-    ]
+  "active": false,
+  "settings": {},
+  "meta": {
+    "templateCredsSetupCompleted": true
   }
 }
