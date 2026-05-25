@@ -1,0 +1,302 @@
+{
+  "name": "Pareto LLM Routing – Versioning App",
+  "nodes": [
+    {
+      "parameters": {},
+      "id": "manual-trigger",
+      "name": "Manual Trigger",
+      "type": "n8n-nodes-base.manualTrigger",
+      "typeVersion": 1,
+      "position": [250, 300]
+    },
+    {
+      "parameters": {
+        "method": "GET",
+        "url": "={{ $vars.PDF_TEXT_URL }}",
+        "authentication": "none"
+      },
+      "id": "fetch-spec",
+      "name": "Fetch USS JSON",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 3,
+      "position": [450, 300]
+    },
+    {
+      "parameters": {
+        "jsCode": "// Initialize iteration state\nreturn {\n  uss_spec: $json,\n  cheap_attempt: 0,\n  max_cheap_attempts: 3,\n  premium_used: false\n};"
+      },
+      "id": "init-state",
+      "name": "Initialize State",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [650, 300]
+    },
+    {
+      "parameters": {
+        "jsCode": "// Prepare prompt for cheap model\nconst spec = $json.uss_spec;\nconst errors = $json.errors || [];\nconst prompt = `Generate the complete application code from this USS JSON. Return JSON with 'files' array.\nUSS: ${JSON.stringify(spec)}\n${errors.length ? `Previous errors: ${errors.join(', ')}. Fix them.` : ''}\nOnly output JSON.`;\nreturn { prompt, cheap_attempt: $json.cheap_attempt, max_cheap_attempts: $json.max_cheap_attempts, premium_used: $json.premium_used, uss_spec: spec };"
+      },
+      "id": "prepare-cheap-prompt",
+      "name": "Prepare Cheap Prompt",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [850, 300]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://openrouter.ai/api/v1/chat/completions",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            { "name": "Authorization", "value": "={{ $credentials.OpenRouterAPIKey }}" }
+          ]
+        },
+        "sendBody": true,
+        "bodyParameters": {
+          "parameters": {
+            "model": "deepseek/deepseek-v4-flash",
+            "messages": [
+              { "role": "system", "content": "You are a code generator. Output only JSON." },
+              { "role": "user", "content": "={{ $json.prompt }}" }
+            ],
+            "temperature": 0.1,
+            "max_tokens": 16000
+          }
+        }
+      },
+      "id": "call-cheap-model",
+      "name": "Call Cheap Model",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 3,
+      "position": [1050, 300]
+    },
+    {
+      "parameters": {
+        "jsCode": "const response = $input.first().json.choices[0].message.content;\nlet files;\ntry { files = JSON.parse(response).files; } catch(e) { throw new Error('Invalid JSON: ' + response); }\nreturn { files, errors: [] };"
+      },
+      "id": "parse-files",
+      "name": "Parse Files",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [1250, 300]
+    },
+    {
+      "parameters": {
+        "jsCode": "const files = $json.files;\nconst main = files.find(f => f.path === 'backend/app/main.py');\nlet errors = [];\nif (!main) errors.push('Missing backend/app/main.py');\nelse if (!main.content.includes('from fastapi import FastAPI')) errors.push('main.py missing FastAPI import');\nif (!files.find(f => f.path === 'docker-compose.yml')) errors.push('Missing docker-compose.yml');\nconst passed = errors.length === 0;\nreturn { validation_passed: passed, errors, files };"
+      },
+      "id": "validate-code",
+      "name": "Validate Code",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [1450, 300]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "string": [
+            { "value1": "={{$json.validation_passed}}", "operation": "equals", "value2": true }
+          ]
+        }
+      },
+      "id": "if-passed",
+      "name": "Validation Passed?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 1,
+      "position": [1650, 300]
+    },
+    {
+      "parameters": {
+        "jsCode": "// Validation failed. Update state and decide next action\nlet state = $('init-state').item.json;\nlet cheap_attempt = state.cheap_attempt + 1;\nlet premium_used = state.premium_used;\nlet nextNode = 'cheap';\nif (cheap_attempt >= state.max_cheap_attempts && !premium_used) {\n  premium_used = true;\n  nextNode = 'premium';\n} else if (cheap_attempt >= state.max_cheap_attempts && premium_used) {\n  nextNode = 'spec_review';\n}\nreturn {\n  uss_spec: state.uss_spec,\n  cheap_attempt,\n  max_cheap_attempts: state.max_cheap_attempts,\n  premium_used,\n  errors: $json.errors,\n  files: $json.files,\n  nextNode\n};"
+      },
+      "id": "update-failure-state",
+      "name": "Update Failure State",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [1650, 500]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "string": [
+            { "value1": "={{$json.nextNode}}", "operation": "equals", "value2": "cheap" }
+          ]
+        }
+      },
+      "id": "if-cheap-retry",
+      "name": "Cheap Retry?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 1,
+      "position": [1850, 500]
+    },
+    {
+      "parameters": {
+        "jsCode": "// Prepare error feedback for cheap retry\nconst errors = $json.errors;\nconst prompt = `You generated code with errors: ${errors.join(', ')}. Please fix and return only JSON with files array.`;\nreturn { prompt, cheap_attempt: $json.cheap_attempt, max_cheap_attempts: $json.max_cheap_attempts, premium_used: $json.premium_used, uss_spec: $json.uss_spec };"
+      },
+      "id": "prepare-cheap-retry",
+      "name": "Prepare Cheap Retry",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [2050, 500]
+    },
+    {
+      "parameters": {
+        "jsCode": "// Escalate to premium model\nconst spec = $json.uss_spec;\nconst errors = $json.errors;\nconst prompt = `Fix the following code errors based on the USS spec. Return JSON with files array.\nUSS: ${JSON.stringify(spec)}\nErrors: ${errors.join(', ')}`;\nreturn { prompt, spec, errors };"
+      },
+      "id": "prepare-premium",
+      "name": "Prepare Premium",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [1850, 700]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://openrouter.ai/api/v1/chat/completions",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            { "name": "Authorization", "value": "={{ $credentials.OpenRouterAPIKey }}" }
+          ]
+        },
+        "sendBody": true,
+        "bodyParameters": {
+          "parameters": {
+            "model": "openai/gpt-4",
+            "messages": [
+              { "role": "system", "content": "You are a debugger. Output only JSON with files array." },
+              { "role": "user", "content": "={{ $json.prompt }}" }
+            ],
+            "temperature": 0.2,
+            "max_tokens": 16000
+          }
+        }
+      },
+      "id": "call-premium",
+      "name": "Call Premium Model",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 3,
+      "position": [2050, 700]
+    },
+    {
+      "parameters": {
+        "jsCode": "const response = $input.first().json.choices[0].message.content;\nlet files;\ntry { files = JSON.parse(response).files; } catch(e) { throw new Error('Invalid JSON: ' + response); }\nreturn { files, errors: [] };"
+      },
+      "id": "parse-premium",
+      "name": "Parse Premium",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [2250, 700]
+    },
+    {
+      "parameters": {
+        "jsCode": "// Spec review needed – send notification or log\nconst msg = `Premium model failed after ${$json.cheap_attempt} cheap attempts. Errors: ${$json.errors.join(', ')}. Please review the specification.`;\nconsole.error(msg);\n// Optionally call a webhook or send email\nreturn { status: 'spec_review_needed', message: msg };"
+      },
+      "id": "spec-review",
+      "name": "Spec Review",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [2050, 900]
+    },
+    {
+      "parameters": {
+        "jsCode": "// Commit to GitHub\nconst files = $json.files;\nconst owner = 'aslamlogic';\nconst repo = 'document-versioning-app';\nconst branch = 'main';\nconst commits = files.map(f => ({\n  path: f.path,\n  content: Buffer.from(f.content).toString('base64'),\n  message: `Add ${f.path}`\n}));\nreturn { owner, repo, branch, commits };"
+      },
+      "id": "prepare-commit",
+      "name": "Prepare GitHub Commit",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [1850, 300]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://api.github.com/repos/aslamlogic/document-versioning-app/contents/batch",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            { "name": "Authorization", "value": "={{ $credentials.GitHubToken }}" }
+          ]
+        },
+        "sendBody": true,
+        "bodyParameters": {
+          "parameters": {
+            "branch": "main",
+            "commits": "={{$json.commits}}",
+            "message": "Automated build (Pareto routing)"
+          }
+        }
+      },
+      "id": "commit-to-github",
+      "name": "Commit to GitHub",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 3,
+      "position": [2050, 300]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "={{ $vars.COOLIFY_WEBHOOK_URL }}",
+        "sendBody": true,
+        "bodyParameters": {
+          "parameters": {
+            "repository": "aslamlogic/document-versioning-app",
+            "branch": "main"
+          }
+        }
+      },
+      "id": "trigger-coolify",
+      "name": "Trigger Coolify Deploy",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 3,
+      "position": [2250, 300]
+    },
+    {
+      "parameters": {
+        "jsCode": "console.log('Deployment triggered successfully');\nreturn { status: 'success' };"
+      },
+      "id": "log-success",
+      "name": "Log Success",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [2450, 300]
+    }
+  ],
+  "connections": {
+    "Manual Trigger": { "main": [[{ "node": "Fetch USS JSON", "type": "main", "index": 0 }]] },
+    "Fetch USS JSON": { "main": [[{ "node": "Initialize State", "type": "main", "index": 0 }]] },
+    "Initialize State": { "main": [[{ "node": "Prepare Cheap Prompt", "type": "main", "index": 0 }]] },
+    "Prepare Cheap Prompt": { "main": [[{ "node": "Call Cheap Model", "type": "main", "index": 0 }]] },
+    "Call Cheap Model": { "main": [[{ "node": "Parse Files", "type": "main", "index": 0 }]] },
+    "Parse Files": { "main": [[{ "node": "Validate Code", "type": "main", "index": 0 }]] },
+    "Validate Code": { "main": [[{ "node": "Validation Passed?", "type": "main", "index": 0 }]] },
+    "Validation Passed?": {
+      "main": [
+        [{ "node": "Prepare GitHub Commit", "type": "main", "index": 0 }],
+        [{ "node": "Update Failure State", "type": "main", "index": 0 }]
+      ]
+    },
+    "Update Failure State": { "main": [[{ "node": "Cheap Retry?", "type": "main", "index": 0 }]] },
+    "Cheap Retry?": {
+      "main": [
+        [{ "node": "Prepare Cheap Retry", "type": "main", "index": 0 }],
+        [{ "node": "Prepare Premium", "type": "main", "index": 0 }],
+        [{ "node": "Spec Review", "type": "main", "index": 0 }]
+      ]
+    },
+    "Prepare Cheap Retry": { "main": [[{ "node": "Call Cheap Model", "type": "main", "index": 0 }]] },
+    "Prepare Premium": { "main": [[{ "node": "Call Premium Model", "type": "main", "index": 0 }]] },
+    "Call Premium Model": { "main": [[{ "node": "Parse Premium", "type": "main", "index": 0 }]] },
+    "Parse Premium": { "main": [[{ "node": "Validate Code", "type": "main", "index": 0 }]] },
+    "Spec Review": { "main": [] },
+    "Prepare GitHub Commit": { "main": [[{ "node": "Commit to GitHub", "type": "main", "index": 0 }]] },
+    "Commit to GitHub": { "main": [[{ "node": "Trigger Coolify Deploy", "type": "main", "index": 0 }]] },
+    "Trigger Coolify Deploy": { "main": [[{ "node": "Log Success", "type": "main", "index": 0 }]] }
+  },
+  "settings": { "executionOrder": "v1" }
+}
