@@ -3,7 +3,7 @@
   "nodes": [
     {
       "parameters": {},
-      "id": "653e5400-8b70-4cf7-98df-cf6ff664f15b",
+      "id": "manual-trigger",
       "name": "Manual Trigger",
       "type": "n8n-nodes-base.manualTrigger",
       "typeVersion": 1,
@@ -15,7 +15,7 @@
         "url": "={{ $vars.PDF_TEXT_URL }}",
         "authentication": "none"
       },
-      "id": "7cabce44-4007-4965-bfc2-036aec32e4f7",
+      "id": "fetch-spec",
       "name": "Fetch USS JSON",
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 3,
@@ -25,7 +25,7 @@
       "parameters": {
         "jsCode": "return { uss_spec: $json, cheap_attempt: 0, max_cheap_attempts: 3, premium_used: false };"
       },
-      "id": "4b1a35d7-887d-421a-b208-058c0140f19f",
+      "id": "init-state",
       "name": "Initialize State",
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
@@ -35,7 +35,7 @@
       "parameters": {
         "jsCode": "const spec = $json.uss_spec;\nconst errors = $json.errors || [];\nconst prompt = `Generate the complete application code from this USS JSON. Return JSON with 'files' array.\nUSS: ${JSON.stringify(spec)}\n${errors.length ? `Previous errors: ${errors.join(', ')}. Fix them.` : ''}\nOnly output JSON.`;\nreturn { prompt, cheap_attempt: $json.cheap_attempt, max_cheap_attempts: $json.max_cheap_attempts, premium_used: $json.premium_used, uss_spec: spec };"
       },
-      "id": "5d5f683b-8eda-467b-890d-c3fd8ce27914",
+      "id": "prepare-cheap-prompt",
       "name": "Prepare Cheap Prompt",
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
@@ -66,7 +66,7 @@
           }
         }
       },
-      "id": "ec1d9f7c-1fcc-405d-98a5-b5b4e4a534b6",
+      "id": "call-cheap-model",
       "name": "Call Cheap Model",
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 3,
@@ -76,7 +76,7 @@
       "parameters": {
         "jsCode": "const response = $input.first().json.choices[0].message.content;\nlet files;\ntry { files = JSON.parse(response).files; } catch(e) { throw new Error('Invalid JSON: ' + response); }\nreturn { files, errors: [] };"
       },
-      "id": "a05ecd7b-4641-4558-a33f-d860c9f68ccf",
+      "id": "parse-files",
       "name": "Parse Files",
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
@@ -86,7 +86,7 @@
       "parameters": {
         "jsCode": "const files = $json.files;\nconst main = files.find(f => f.path === 'backend/app/main.py');\nlet errors = [];\nif (!main) errors.push('Missing backend/app/main.py');\nelse if (!main.content.includes('from fastapi import FastAPI')) errors.push('main.py missing FastAPI import');\nif (!files.find(f => f.path === 'docker-compose.yml')) errors.push('Missing docker-compose.yml');\nconst passed = errors.length === 0;\nreturn { validation_passed: passed, errors, files };"
       },
-      "id": "ada54149-17fe-4283-9566-5c048c5de56d",
+      "id": "validate-code",
       "name": "Validate Code",
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
@@ -100,7 +100,7 @@
           ]
         }
       },
-      "id": "8b8dc491-43a5-462c-908f-e763103f252f",
+      "id": "if-passed",
       "name": "Validation Passed?",
       "type": "n8n-nodes-base.if",
       "typeVersion": 1,
@@ -110,7 +110,7 @@
       "parameters": {
         "jsCode": "let state = $('Initialize State').item.json;\nlet cheap_attempt = state.cheap_attempt + 1;\nlet premium_used = state.premium_used;\nlet nextNode = 'cheap';\nif (cheap_attempt >= state.max_cheap_attempts && !premium_used) {\n  premium_used = true;\n  nextNode = 'premium';\n} else if (cheap_attempt >= state.max_cheap_attempts && premium_used) {\n  nextNode = 'spec_review';\n}\nreturn {\n  uss_spec: state.uss_spec,\n  cheap_attempt,\n  max_cheap_attempts: state.max_cheap_attempts,\n  premium_used,\n  errors: $json.errors,\n  files: $json.files,\n  nextNode\n};"
       },
-      "id": "b68f1297-8207-418a-90cd-20ca8f35f4f2",
+      "id": "update-failure-state",
       "name": "Update Failure State",
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
@@ -124,7 +124,7 @@
           ]
         }
       },
-      "id": "e9ef894a-1233-406d-9243-8d1673fc9340",
+      "id": "if-cheap-retry",
       "name": "Cheap Retry?",
       "type": "n8n-nodes-base.if",
       "typeVersion": 1,
@@ -134,7 +134,7 @@
       "parameters": {
         "jsCode": "const errors = $json.errors;\nconst prompt = `You generated code with errors: ${errors.join(', ')}. Please fix and return only JSON with files array.`;\nreturn { prompt, cheap_attempt: $json.cheap_attempt, max_cheap_attempts: $json.max_cheap_attempts, premium_used: $json.premium_used, uss_spec: $json.uss_spec };"
       },
-      "id": "f7fcd264-c4ba-4171-b252-9764346508c8",
+      "id": "prepare-cheap-retry",
       "name": "Prepare Cheap Retry",
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
@@ -144,7 +144,7 @@
       "parameters": {
         "jsCode": "const spec = $json.uss_spec;\nconst errors = $json.errors;\nconst prompt = `Fix the following code errors based on the USS spec. Return JSON with files array.\nUSS: ${JSON.stringify(spec)}\nErrors: ${errors.join(', ')}`;\nreturn { prompt, spec, errors };"
       },
-      "id": "788d422b-2d0b-4e2c-b5d0-a27acb4d2706",
+      "id": "prepare-premium",
       "name": "Prepare Premium",
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
@@ -175,7 +175,7 @@
           }
         }
       },
-      "id": "bf3ddd10-7b2f-4199-b4a0-45b1dc01a35f",
+      "id": "call-premium",
       "name": "Call Premium Model",
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 3,
@@ -185,7 +185,7 @@
       "parameters": {
         "jsCode": "const response = $input.first().json.choices[0].message.content;\nlet files;\ntry { files = JSON.parse(response).files; } catch(e) { throw new Error('Invalid JSON: ' + response); }\nreturn { files, errors: [] };"
       },
-      "id": "bf3ddd10-7b2f-4199-b4a0-45b1dc01a360",
+      "id": "parse-premium",
       "name": "Parse Premium",
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
@@ -195,7 +195,7 @@
       "parameters": {
         "jsCode": "const msg = `Premium model failed after ${$json.cheap_attempt} cheap attempts. Errors: ${$json.errors.join(', ')}. Please review the specification.`;\nconsole.error(msg);\nreturn { status: 'spec_review_needed', message: msg };"
       },
-      "id": "bf3ddd10-7b2f-4199-b4a0-45b1dc01a361",
+      "id": "spec-review",
       "name": "Spec Review",
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
@@ -205,7 +205,7 @@
       "parameters": {
         "jsCode": "const files = $json.files;\nconst owner = 'aslamlogic';\nconst repo = 'document-versioning-app';\nconst branch = 'main';\nconst commits = files.map(f => ({\n  path: f.path,\n  content: Buffer.from(f.content).toString('base64'),\n  message: `Add ${f.path}`\n}));\nreturn { owner, repo, branch, commits };"
       },
-      "id": "bf3ddd10-7b2f-4199-b4a0-45b1dc01a362",
+      "id": "prepare-commit",
       "name": "Prepare GitHub Commit",
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
@@ -232,7 +232,7 @@
           }
         }
       },
-      "id": "bf3ddd10-7b2f-4199-b4a0-45b1dc01a363",
+      "id": "commit-to-github",
       "name": "Commit to GitHub",
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 3,
@@ -250,7 +250,7 @@
           }
         }
       },
-      "id": "bf3ddd10-7b2f-4199-b4a0-45b1dc01a364",
+      "id": "trigger-coolify",
       "name": "Trigger Coolify Deploy",
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 3,
@@ -260,14 +260,13 @@
       "parameters": {
         "jsCode": "console.log('Deployment triggered successfully');\nreturn { status: 'success' };"
       },
-      "id": "bf3ddd10-7b2f-4199-b4a0-45b1dc01a365",
+      "id": "log-success",
       "name": "Log Success",
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
       "position": [2450, 300]
     }
   ],
-  "pinData": {},
   "connections": {
     "Manual Trigger": { "main": [[{ "node": "Fetch USS JSON", "type": "main", "index": 0 }]] },
     "Fetch USS JSON": { "main": [[{ "node": "Initialize State", "type": "main", "index": 0 }]] },
@@ -300,14 +299,8 @@
     "Trigger Coolify Deploy": { "main": [[{ "node": "Log Success", "type": "main", "index": 0 }]] }
   },
   "active": false,
-  "settings": {
-    "executionOrder": "v1",
-    "binaryMode": "separate"
-  },
-  "versionId": "333eddaa-a85c-4387-90f1-20580b0d8f77",
+  "settings": {},
   "meta": {
-    "instanceId": "f71d7b7e7fcbfcd9bb14e1054bb6c52df48d44cd13e517e96d59b2a7dff2f8cc"
-  },
-  "id": "ParetoWorkflow",
-  "tags": []
+    "templateCredsSetupCompleted": true
+  }
 }
