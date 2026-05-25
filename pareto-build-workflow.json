@@ -3,11 +3,11 @@
   "nodes": [
     {
       "parameters": {},
-      "id": "manual-trigger",
-      "name": "Manual Trigger",
       "type": "n8n-nodes-base.manualTrigger",
       "typeVersion": 1,
-      "position": [250, 300]
+      "position": [250, 300],
+      "id": "11111111-1111-1111-1111-111111111111",
+      "name": "Manual Trigger"
     },
     {
       "parameters": {
@@ -15,31 +15,31 @@
         "url": "={{ $vars.PDF_TEXT_URL }}",
         "authentication": "none"
       },
-      "id": "fetch-spec",
-      "name": "Fetch USS JSON",
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 3,
-      "position": [450, 300]
+      "position": [450, 300],
+      "id": "22222222-2222-2222-2222-222222222222",
+      "name": "Fetch USS JSON"
     },
     {
       "parameters": {
         "jsCode": "// Initialize iteration state\nreturn {\n  uss_spec: $json,\n  cheap_attempt: 0,\n  max_cheap_attempts: 3,\n  premium_used: false\n};"
       },
-      "id": "init-state",
-      "name": "Initialize State",
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
-      "position": [650, 300]
+      "position": [650, 300],
+      "id": "33333333-3333-3333-3333-333333333333",
+      "name": "Initialize State"
     },
     {
       "parameters": {
         "jsCode": "// Prepare prompt for cheap model\nconst spec = $json.uss_spec;\nconst errors = $json.errors || [];\nconst prompt = `Generate the complete application code from this USS JSON. Return JSON with 'files' array.\nUSS: ${JSON.stringify(spec)}\n${errors.length ? `Previous errors: ${errors.join(', ')}. Fix them.` : ''}\nOnly output JSON.`;\nreturn { prompt, cheap_attempt: $json.cheap_attempt, max_cheap_attempts: $json.max_cheap_attempts, premium_used: $json.premium_used, uss_spec: spec };"
       },
-      "id": "prepare-cheap-prompt",
-      "name": "Prepare Cheap Prompt",
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
-      "position": [850, 300]
+      "position": [850, 300],
+      "id": "44444444-4444-4444-4444-444444444444",
+      "name": "Prepare Cheap Prompt"
     },
     {
       "parameters": {
@@ -66,31 +66,31 @@
           }
         }
       },
-      "id": "call-cheap-model",
-      "name": "Call Cheap Model",
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 3,
-      "position": [1050, 300]
+      "position": [1050, 300],
+      "id": "55555555-5555-5555-5555-555555555555",
+      "name": "Call Cheap Model"
     },
     {
       "parameters": {
         "jsCode": "const response = $input.first().json.choices[0].message.content;\nlet files;\ntry { files = JSON.parse(response).files; } catch(e) { throw new Error('Invalid JSON: ' + response); }\nreturn { files, errors: [] };"
       },
-      "id": "parse-files",
-      "name": "Parse Files",
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
-      "position": [1250, 300]
+      "position": [1250, 300],
+      "id": "66666666-6666-6666-6666-666666666666",
+      "name": "Parse Files"
     },
     {
       "parameters": {
         "jsCode": "const files = $json.files;\nconst main = files.find(f => f.path === 'backend/app/main.py');\nlet errors = [];\nif (!main) errors.push('Missing backend/app/main.py');\nelse if (!main.content.includes('from fastapi import FastAPI')) errors.push('main.py missing FastAPI import');\nif (!files.find(f => f.path === 'docker-compose.yml')) errors.push('Missing docker-compose.yml');\nconst passed = errors.length === 0;\nreturn { validation_passed: passed, errors, files };"
       },
-      "id": "validate-code",
-      "name": "Validate Code",
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
-      "position": [1450, 300]
+      "position": [1450, 300],
+      "id": "77777777-7777-7777-7777-777777777777",
+      "name": "Validate Code"
     },
     {
       "parameters": {
@@ -100,21 +100,21 @@
           ]
         }
       },
-      "id": "if-passed",
-      "name": "Validation Passed?",
       "type": "n8n-nodes-base.if",
       "typeVersion": 1,
-      "position": [1650, 300]
+      "position": [1650, 300],
+      "id": "88888888-8888-8888-8888-888888888888",
+      "name": "Validation Passed?"
     },
     {
       "parameters": {
-        "jsCode": "// Validation failed. Update state and decide next action\nlet state = $('init-state').item.json;\nlet cheap_attempt = state.cheap_attempt + 1;\nlet premium_used = state.premium_used;\nlet nextNode = 'cheap';\nif (cheap_attempt >= state.max_cheap_attempts && !premium_used) {\n  premium_used = true;\n  nextNode = 'premium';\n} else if (cheap_attempt >= state.max_cheap_attempts && premium_used) {\n  nextNode = 'spec_review';\n}\nreturn {\n  uss_spec: state.uss_spec,\n  cheap_attempt,\n  max_cheap_attempts: state.max_cheap_attempts,\n  premium_used,\n  errors: $json.errors,\n  files: $json.files,\n  nextNode\n};"
+        "jsCode": "// Validation failed. Update state and decide next action\nlet state = $('Initialize State').item.json;\nlet cheap_attempt = state.cheap_attempt + 1;\nlet premium_used = state.premium_used;\nlet nextNode = 'cheap';\nif (cheap_attempt >= state.max_cheap_attempts && !premium_used) {\n  premium_used = true;\n  nextNode = 'premium';\n} else if (cheap_attempt >= state.max_cheap_attempts && premium_used) {\n  nextNode = 'spec_review';\n}\nreturn {\n  uss_spec: state.uss_spec,\n  cheap_attempt,\n  max_cheap_attempts: state.max_cheap_attempts,\n  premium_used,\n  errors: $json.errors,\n  files: $json.files,\n  nextNode\n};"
       },
-      "id": "update-failure-state",
-      "name": "Update Failure State",
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
-      "position": [1650, 500]
+      "position": [1650, 500],
+      "id": "99999999-9999-9999-9999-999999999999",
+      "name": "Update Failure State"
     },
     {
       "parameters": {
@@ -124,31 +124,31 @@
           ]
         }
       },
-      "id": "if-cheap-retry",
-      "name": "Cheap Retry?",
       "type": "n8n-nodes-base.if",
       "typeVersion": 1,
-      "position": [1850, 500]
+      "position": [1850, 500],
+      "id": "aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa",
+      "name": "Cheap Retry?"
     },
     {
       "parameters": {
         "jsCode": "// Prepare error feedback for cheap retry\nconst errors = $json.errors;\nconst prompt = `You generated code with errors: ${errors.join(', ')}. Please fix and return only JSON with files array.`;\nreturn { prompt, cheap_attempt: $json.cheap_attempt, max_cheap_attempts: $json.max_cheap_attempts, premium_used: $json.premium_used, uss_spec: $json.uss_spec };"
       },
-      "id": "prepare-cheap-retry",
-      "name": "Prepare Cheap Retry",
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
-      "position": [2050, 500]
+      "position": [2050, 500],
+      "id": "bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb",
+      "name": "Prepare Cheap Retry"
     },
     {
       "parameters": {
         "jsCode": "// Escalate to premium model\nconst spec = $json.uss_spec;\nconst errors = $json.errors;\nconst prompt = `Fix the following code errors based on the USS spec. Return JSON with files array.\nUSS: ${JSON.stringify(spec)}\nErrors: ${errors.join(', ')}`;\nreturn { prompt, spec, errors };"
       },
-      "id": "prepare-premium",
-      "name": "Prepare Premium",
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
-      "position": [1850, 700]
+      "position": [1850, 700],
+      "id": "cccccccc-cccc-cccc-cccc-cccccccccccc",
+      "name": "Prepare Premium"
     },
     {
       "parameters": {
@@ -175,41 +175,41 @@
           }
         }
       },
-      "id": "call-premium",
-      "name": "Call Premium Model",
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 3,
-      "position": [2050, 700]
+      "position": [2050, 700],
+      "id": "dddddddd-dddd-dddd-dddd-dddddddddddd",
+      "name": "Call Premium Model"
     },
     {
       "parameters": {
         "jsCode": "const response = $input.first().json.choices[0].message.content;\nlet files;\ntry { files = JSON.parse(response).files; } catch(e) { throw new Error('Invalid JSON: ' + response); }\nreturn { files, errors: [] };"
       },
-      "id": "parse-premium",
-      "name": "Parse Premium",
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
-      "position": [2250, 700]
+      "position": [2250, 700],
+      "id": "eeeeeeee-eeee-eeee-eeee-eeeeeeeeeeee",
+      "name": "Parse Premium"
     },
     {
       "parameters": {
         "jsCode": "// Spec review needed – send notification or log\nconst msg = `Premium model failed after ${$json.cheap_attempt} cheap attempts. Errors: ${$json.errors.join(', ')}. Please review the specification.`;\nconsole.error(msg);\nreturn { status: 'spec_review_needed', message: msg };"
       },
-      "id": "spec-review",
-      "name": "Spec Review",
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
-      "position": [2050, 900]
+      "position": [2050, 900],
+      "id": "ffffffff-ffff-ffff-ffff-ffffffffffff",
+      "name": "Spec Review"
     },
     {
       "parameters": {
         "jsCode": "// Commit to GitHub\nconst files = $json.files;\nconst owner = 'aslamlogic';\nconst repo = 'document-versioning-app';\nconst branch = 'main';\nconst commits = files.map(f => ({\n  path: f.path,\n  content: Buffer.from(f.content).toString('base64'),\n  message: `Add ${f.path}`\n}));\nreturn { owner, repo, branch, commits };"
       },
-      "id": "prepare-commit",
-      "name": "Prepare GitHub Commit",
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
-      "position": [1850, 300]
+      "position": [1850, 300],
+      "id": "11111111-1111-1111-1111-111111111112",
+      "name": "Prepare GitHub Commit"
     },
     {
       "parameters": {
@@ -232,11 +232,11 @@
           }
         }
       },
-      "id": "commit-to-github",
-      "name": "Commit to GitHub",
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 3,
-      "position": [2050, 300]
+      "position": [2050, 300],
+      "id": "22222222-2222-2222-2222-222222222223",
+      "name": "Commit to GitHub"
     },
     {
       "parameters": {
@@ -250,23 +250,24 @@
           }
         }
       },
-      "id": "trigger-coolify",
-      "name": "Trigger Coolify Deploy",
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 3,
-      "position": [2250, 300]
+      "position": [2250, 300],
+      "id": "33333333-3333-3333-3333-333333333334",
+      "name": "Trigger Coolify Deploy"
     },
     {
       "parameters": {
         "jsCode": "console.log('Deployment triggered successfully');\nreturn { status: 'success' };"
       },
-      "id": "log-success",
-      "name": "Log Success",
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
-      "position": [2450, 300]
+      "position": [2450, 300],
+      "id": "44444444-4444-4444-4444-444444444445",
+      "name": "Log Success"
     }
   ],
+  "pinData": {},
   "connections": {
     "Manual Trigger": { "main": [[{ "node": "Fetch USS JSON", "type": "main", "index": 0 }]] },
     "Fetch USS JSON": { "main": [[{ "node": "Initialize State", "type": "main", "index": 0 }]] },
@@ -298,8 +299,15 @@
     "Commit to GitHub": { "main": [[{ "node": "Trigger Coolify Deploy", "type": "main", "index": 0 }]] },
     "Trigger Coolify Deploy": { "main": [[{ "node": "Log Success", "type": "main", "index": 0 }]] }
   },
-  "settings": { "executionOrder": "v1" },
-  "staticData": null,
-  "tags": [],
-  "triggerCount": 0
+  "active": false,
+  "settings": {
+    "executionOrder": "v1",
+    "binaryMode": "separate"
+  },
+  "versionId": "00000000-0000-0000-0000-000000000000",
+  "meta": {
+    "instanceId": "f71d7b7e7fcbfcd9bb14e1054bb6c52df48d44cd13e517e96d59b2a7dff2f8cc"
+  },
+  "id": "ParetoWorkflow",
+  "tags": []
 }
