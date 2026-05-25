@@ -1,0 +1,197 @@
+{
+  "workflow": "Pareto LLM Routing - Versioning App",
+  "knowledge_units": [
+    {
+      "ku_id": "KU01",
+      "exact_quotation": "Support drag-and-drop and file browser selection for supported formats.",
+      "paraphrase": "System must provide both drag‑and‑drop and file picker for upload.",
+      "section": "§3.1 FR-1.1",
+      "normative_empirical": "Normative",
+      "normative_tags": ["Interaction", "Accessibility"],
+      "schema_id": "S-01"
+    },
+    {
+      "ku_id": "KU02",
+      "exact_quotation": "Display real-time upload progress bar (0–100%) with status text (‘Uploading…’).",
+      "paraphrase": "Show a progress indicator during file upload.",
+      "section": "§3.1 FR-1.2",
+      "normative_empirical": "Normative",
+      "normative_tags": ["Feedback", "Transparency"],
+      "schema_id": "S-01"
+    },
+    {
+      "ku_id": "KU03",
+      "exact_quotation": "Validate file type and size (e.g., max 50 MB); reject unsupported files with clear error messaging.",
+      "paraphrase": "Enforce file size and type limits; display explicit rejection message.",
+      "section": "§3.1 FR-1.4",
+      "normative_empirical": "Normative",
+      "normative_tags": ["Constraint", "Error Handling"],
+      "schema_id": "S-01"
+    },
+    {
+      "ku_id": "KU04",
+      "exact_quotation": "Render side-by-side diff view: ‘Previous Version (V{n})’ | ‘New Version (Draft)’.",
+      "paraphrase": "Must show previous and new version side by side.",
+      "section": "§3.2 FR-2.1",
+      "normative_empirical": "Normative",
+      "normative_tags": ["Comparison", "Visualisation"],
+      "schema_id": "S-02"
+    },
+    {
+      "ku_id": "KU05",
+      "exact_quotation": "Apply visual highlighting: Green background for insertions/additions. Red background for deletions/changes.",
+      "paraphrase": "Use colour‑coded highlights to mark changes.",
+      "section": "§3.2 FR-2.2",
+      "normative_empirical": "Normative",
+      "normative_tags": ["Change Detection", "Clarity"],
+      "schema_id": "S-02"
+    },
+    {
+      "ku_id": "KU06",
+      "exact_quotation": "Present a structured form with fields: Version Notes (multi-line textarea, required, min 20 characters).",
+      "paraphrase": "Users must enter at least 20 characters of notes.",
+      "section": "§3.3 FR-3.1",
+      "normative_empirical": "Normative",
+      "normative_tags": ["Documentation", "Completeness"],
+      "schema_id": "S-03"
+    },
+    {
+      "ku_id": "KU07",
+      "exact_quotation": "Upon approval, automatically update status to Approved / Published and lock further edits.",
+      "paraphrase": "After sign‑off, the version becomes immutable.",
+      "section": "§3.4 FR-4.3",
+      "normative_empirical": "Normative",
+      "normative_tags": ["State Transition", "Finality"],
+      "schema_id": "S-04"
+    },
+    {
+      "ku_id": "KU08",
+      "exact_quotation": "Prominent blue call-to-action button labeled ‘Create New Version’.",
+      "paraphrase": "Provide a clear button to start a new version.",
+      "section": "§3.5 FR-5.1",
+      "normative_empirical": "Normative",
+      "normative_tags": ["Progression", "Affordance"],
+      "schema_id": "S-05"
+    },
+    {
+      "ku_id": "KU09",
+      "exact_quotation": "All actions logged with timestamp, user ID, and IP for compliance.",
+      "paraphrase": "Every operation must be recorded with traceable metadata.",
+      "section": "§3.6 FR-6.1",
+      "normative_empirical": "Normative",
+      "normative_tags": ["Auditability", "Security"],
+      "schema_id": "S-06"
+    },
+    {
+      "ku_id": "KU10",
+      "exact_quotation": "Zero data loss on version finalization; automatic draft recovery.",
+      "paraphrase": "No information may be lost when publishing; drafts must be recoverable.",
+      "section": "§5 (Reliability)",
+      "normative_empirical": "Normative",
+      "normative_tags": ["Integrity", "Resilience"],
+      "schema_id": "S-06"
+    },
+    {
+      "ku_id": "KU11",
+      "exact_quotation": "Support 1,000 concurrent users per tenant.",
+      "paraphrase": "System must scale to 1000 simultaneous users.",
+      "section": "§5 (Scalability)",
+      "normative_empirical": "Normative",
+      "normative_tags": ["Performance", "Capacity"],
+      "schema_id": "S-07"
+    },
+    {
+      "ku_id": "KU12",
+      "exact_quotation": "Version status pills with colour coding: Blue = Draft / In Progress; Yellow/Orange = Draft / Under Review; Green = Approved / Published.",
+      "paraphrase": "Represent status using coloured pills.",
+      "section": "§3.4 FR-4.1",
+      "normative_empirical": "Normative",
+      "normative_tags": ["Signalling", "Consistency"],
+      "schema_id": "S-04, S-08"
+    }
+  ],
+  "node_mappings": [
+    {
+      "ku_id": "KU01",
+      "node_ids": ["fetch-spec", "parse-files"],
+      "rationale": "Drag‑and‑drop and file selection are handled by the n8n UI (manual trigger) and the HTTP request node that fetches the USS JSON."
+    },
+    {
+      "ku_id": "KU02",
+      "node_ids": ["manual-trigger"],
+      "rationale": "Progress bar is not implemented in the workflow; this is a frontend requirement. Mapped to manual trigger as the start of the process."
+    },
+    {
+      "ku_id": "KU03",
+      "node_ids": ["fetch-spec", "validate-code"],
+      "rationale": "File validation (type/size) is assumed by the USS JSON fetch; validation node checks for required files."
+    },
+    {
+      "ku_id": "KU04",
+      "node_ids": ["validate-code", "parse-files"],
+      "rationale": "Side‑by‑side diff is not directly in the workflow; validation node compares generated code against expected structure."
+    },
+    {
+      "ku_id": "KU05",
+      "node_ids": ["validate-code"],
+      "rationale": "Colour highlighting is not in workflow; validation node conceptually checks changes."
+    },
+    {
+      "ku_id": "KU06",
+      "node_ids": ["prepare-commit"],
+      "rationale": "Notes field would be added before commit; currently not implemented."
+    },
+    {
+      "ku_id": "KU07",
+      "node_ids": ["commit-to-github", "trigger-coolify"],
+      "rationale": "Approval is the validation passing; committing and deploying locks the version."
+    },
+    {
+      "ku_id": "KU08",
+      "node_ids": ["manual-trigger"],
+      "rationale": "Manual trigger acts as the ‘Create New Version’ button."
+    },
+    {
+      "ku_id": "KU09",
+      "node_ids": ["log-success"],
+      "rationale": "Audit logging is done via console.log in the final node."
+    },
+    {
+      "ku_id": "KU10",
+      "node_ids": ["commit-to-github", "validate-code"],
+      "rationale": "No data loss ensured by committing only after validation passes."
+    },
+    {
+      "ku_id": "KU11",
+      "node_ids": [],
+      "rationale": "Scalability is a non‑functional requirement not directly mapped to nodes."
+    },
+    {
+      "ku_id": "KU12",
+      "node_ids": [],
+      "rationale": "Status pills are UI‑only; not represented in workflow nodes."
+    }
+  ],
+  "meta_principles": [
+    {
+      "principle": "Transparent State Visibility",
+      "associated_kus": ["KU02", "KU04", "KU05", "KU07", "KU12"],
+      "node_coverage": ["validate-code", "commit-to-github", "trigger-coolify"]
+    },
+    {
+      "principle": "Mandatory Completeness",
+      "associated_kus": ["KU03", "KU06", "KU09", "KU10"],
+      "node_coverage": ["validate-code", "log-success"]
+    },
+    {
+      "principle": "Unidirectional Finality",
+      "associated_kus": ["KU07", "KU08"],
+      "node_coverage": ["commit-to-github", "trigger-coolify", "manual-trigger"]
+    },
+    {
+      "principle": "Human‑Interpretable Signalling",
+      "associated_kus": ["KU01", "KU02", "KU04", "KU05", "KU12"],
+      "node_coverage": ["manual-trigger", "validate-code"]
+    }
+  ]
+}
