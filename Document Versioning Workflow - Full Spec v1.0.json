@@ -1,0 +1,190 @@
+{
+  "name": "Document Versioning Workflow - Full Spec v1.0",
+  "nodes": [
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "document-upload",
+        "responseMode": "responseNode"
+      },
+      "id": "webhook-upload",
+      "name": "1. Upload Document",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 1.1,
+      "position": [180, 280]
+    },
+    {
+      "parameters": {
+        "values": {
+          "string": [
+            { "name": "documentId", "value": "={{ $json.body.documentId || 'doc-' + Date.now() }}" },
+            { "name": "versionNumber", "value": "V1" },
+            { "name": "status", "value": "DRAFT_IN_PROGRESS" },
+            { "name": "authorId", "value": "={{ $json.body.authorId || 'user-123' }}" },
+            { "name": "notes", "value": "" },
+            { "name": "uploadTimestamp", "value": "={{ new Date().toISOString() }}" }
+          ]
+        }
+      },
+      "id": "set-metadata",
+      "name": "Set Metadata & Status",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [400, 280]
+    },
+    {
+      "parameters": {
+        "operation": "wait",
+        "resume": "form",
+        "formTitle": "Step 2: Review Changes & Add Notes",
+        "formDescription": "Compare versions and add version notes (minimum 20 characters required)",
+        "formFields": {
+          "values": [
+            { "fieldLabel": "Version Notes", "fieldType": "textarea", "required": true, "fieldName": "notes", "placeholder": "Describe the changes made in this version..." },
+            { "fieldLabel": "Diff Review Completed?", "fieldType": "select", "options": "Yes - Changes Reviewed and Approved\nNo - Need Revision", "required": true, "fieldName": "reviewCompleted" }
+          ]
+        }
+      },
+      "id": "form-review-notes",
+      "name": "2. Review Changes + Add Notes",
+      "type": "n8n-nodes-base.wait",
+      "typeVersion": 1.1,
+      "position": [620, 280]
+    },
+    {
+      "parameters": {
+        "values": {
+          "string": [
+            { "name": "status", "value": "={{ $json.reviewCompleted.includes('Yes') ? 'DRAFT_UNDER_REVIEW' : 'DRAFT_IN_PROGRESS' }}" },
+            { "name": "notes", "value": "={{ $json.notes }}" },
+            { "name": "lastUpdated", "value": "={{ new Date().toISOString() }}" }
+          ]
+        }
+      },
+      "id": "update-status",
+      "name": "Update Status After Review",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [840, 280]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "string": [
+            { "value1": "={{ $json.status }}", "operation": "equals", "value2": "DRAFT_UNDER_REVIEW" }
+          ]
+        }
+      },
+      "id": "switch-status",
+      "name": "Check Status",
+      "type": "n8n-nodes-base.switch",
+      "typeVersion": 3.2,
+      "position": [1060, 280]
+    },
+    {
+      "parameters": {
+        "operation": "wait",
+        "resume": "form",
+        "formTitle": "Step 4: Sign-off & Publish",
+        "formDescription": "Review all changes and decide to publish or reject",
+        "formFields": {
+          "values": [
+            { "fieldLabel": "Sign-off Decision", "fieldType": "select", "options": "Approve & Publish\nReject & Return for Revision", "required": true, "fieldName": "decision" },
+            { "fieldLabel": "Sign-off Comments", "fieldType": "textarea", "required": false, "fieldName": "signoffComments" }
+          ]
+        }
+      },
+      "id": "form-signoff",
+      "name": "3. Sign-off & Publish",
+      "type": "n8n-nodes-base.wait",
+      "typeVersion": 1.1,
+      "position": [1280, 280]
+    },
+    {
+      "parameters": {
+        "values": {
+          "string": [
+            { "name": "status", "value": "={{ $json.decision === 'Approve & Publish' ? 'APPROVED_PUBLISHED' : 'DRAFT_UNDER_REVIEW' }}" },
+            { "name": "publishedAt", "value": "={{ $json.decision === 'Approve & Publish' ? new Date().toISOString() : '' }}" },
+            { "name": "signoffComments", "value": "={{ $json.signoffComments }}" }
+          ]
+        }
+      },
+      "id": "set-final-status",
+      "name": "Set Final Status",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [1500, 280]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "string": [
+            { "value1": "={{ $json.status }}", "operation": "equals", "value2": "APPROVED_PUBLISHED" }
+          ]
+        }
+      },
+      "id": "switch-published",
+      "name": "Check if Published",
+      "type": "n8n-nodes-base.switch",
+      "typeVersion": 3.2,
+      "position": [1720, 280]
+    },
+    {
+      "parameters": {
+        "values": {
+          "string": [
+            { "name": "previousVersions", "value": "={{ [...($json.previousVersions || []), { version: $json.versionNumber, status: $json.status, publishedAt: $json.publishedAt }] }}" },
+            { "name": "versionNumber", "value": "={{ 'V' + (parseInt($json.versionNumber.replace('V','')) + 1) }}" },
+            { "name": "status", "value": "DRAFT_IN_PROGRESS" },
+            { "name": "notes", "value": "" },
+            { "name": "publishedAt", "value": "" }
+          ]
+        }
+      },
+      "id": "create-new-version",
+      "name": "4. Create New Version",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [1940, 280]
+    },
+    {
+      "parameters": {
+        "toEmail": "={{ $json.authorId }}@company.com",
+        "subject": "Document Version Published: {{ $json.versionNumber }}",
+        "text": "Your document version {{ $json.versionNumber }} has been successfully published."
+      },
+      "id": "email-notification",
+      "name": "Send Notification",
+      "type": "n8n-nodes-base.emailSend",
+      "typeVersion": 2.1,
+      "position": [2160, 280]
+    }
+  ],
+  "connections": {
+    "1. Upload Document": { "main": [[{ "node": "Set Metadata & Status", "type": "main", "index": 0 }]] },
+    "Set Metadata & Status": { "main": [[{ "node": "2. Review Changes + Add Notes", "type": "main", "index": 0 }]] },
+    "2. Review Changes + Add Notes": { "main": [[{ "node": "Update Status After Review", "type": "main", "index": 0 }]] },
+    "Update Status After Review": { "main": [[{ "node": "Check Status", "type": "main", "index": 0 }]] },
+    "Check Status": {
+      "main": [
+        [{ "node": "3. Sign-off & Publish", "type": "main", "index": 0 }],
+        []
+      ]
+    },
+    "3. Sign-off & Publish": { "main": [[{ "node": "Set Final Status", "type": "main", "index": 0 }]] },
+    "Set Final Status": { "main": [[{ "node": "Check if Published", "type": "main", "index": 0 }]] },
+    "Check if Published": {
+      "main": [
+        [{ "node": "4. Create New Version", "type": "main", "index": 0 }],
+        []
+      ]
+    },
+    "4. Create New Version": { "main": [[{ "node": "Send Notification", "type": "main", "index": 0 }]] }
+  },
+  "active": false,
+  "settings": {},
+  "meta": {
+    "templateCredsSetupCompleted": true
+  }
+}
