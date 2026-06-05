@@ -3,13 +3,13 @@ version: '3.8'
 services:
   frontend:
     image: nginx:alpine
-    ports:
-      - "3000:80"
+    expose:
+      - "80"
     restart: always
 
   backend:
     image: python:3.10-alpine
-    command: python -m http.server 8080
-    ports:
-      - "8080:8080"
+    command: python -m http.server 8000
+    expose:
+      - "8000"
     restart: always
