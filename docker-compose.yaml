@@ -1,0 +1,15 @@
+version: '3.8'
+
+services:
+  frontend:
+    image: nginx:alpine
+    ports:
+      - "3000:80"
+    restart: always
+
+  backend:
+    image: python:3.10-alpine
+    command: python -m http.server 8000
+    ports:
+      - "8000:8000"
+    restart: always
